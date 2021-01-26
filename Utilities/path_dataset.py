@@ -1,18 +1,14 @@
 import pandas as pd
-from Utilities.directories import *
-import pathlib
 
 
-def create(directory):
+def create_path_dataset(dataset_dir):
     """
-    Loads all file path in dir_name and packs them in a dataset
-    :param dataset_name: Name of the dataset directory. Should be in the root directory.
+    Reads all file paths in dataset_dir and packs them in a .csv file
+    :param dataset_dir: directory of the dataset, should be a pathlib object
     """
-    root = pathlib.Path(directory)
+
     # Combine root directory and filename to a path and put the in a tf data set
-    path_list = root.glob("*xml")
+    path_list = dataset_dir.glob("*xml")
     df = pd.DataFrame(path_list, columns=["paths"])
-    df.to_csv(f"{root}/paths.csv", index=False)
+    df.to_csv(f"{dataset_dir}/paths.csv", index=False)
 
-
-create(r"E:\MLData\thesis\Datasets\automated-classification-data\automated-classification-data\lexisnexis-data\LexisNexis")

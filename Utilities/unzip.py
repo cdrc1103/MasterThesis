@@ -5,8 +5,14 @@ import pathlib
 
 class Unzip:
 
-    def __init__(self):
-        self.target_location = pathlib.Path(r'E:\MLData\thesis\Datasets\automated-classification-data\automated-classification-data\lexisnexis-data\new')
+    def __init__(self, dataset_dir):
+        """
+        Unzip all zip files in dataset_dir and check if a the unzipped file already exists before writing
+        it to the directory
+        :param dataset_dir: directory to the zip files
+        """
+
+        self.target_location = dataset_dir
         self.target_zip = self.target_location.glob("*.zip")
 
     def check(self, member):

@@ -3,18 +3,19 @@ import xmltodict
 from os import listdir
 
 
-def load_xml(file_dir):
+def parse_xml(file_paths):
     """
     Loads all xml files from the directory and converts them to a list of
     python dictionaries
-    :param file_dir: Directory to the files
+    :param file_paths: path to the file or list of file paths
     :return: list of python dictionaries
     """
 
-    file_names = [f for f in listdir(file_dir)]
+    if not type(file_paths) == list:
+        file_paths = [file_paths]
     dict_list = []
-    for name in file_names:
-        tree = ET.parse(file_dir + "/" + name)
+    for path in file_paths:
+        tree = ET.parse(path)
         root = tree.getroot()
         xmlstr = ET.tostring(root)
         dict_list.append(xmltodict.parse(xmlstr))
