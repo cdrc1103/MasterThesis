@@ -28,7 +28,3 @@ class Unzip:
                 for file in file_list:
                     self.check(file)
             print(f"file: {i}")
-
-
-u = Unzip()
-u.unzip()

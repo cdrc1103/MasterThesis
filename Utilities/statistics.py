@@ -69,7 +69,7 @@ def label_occurences(ip7data, path_dataset):
 
     relative_occurrences_dict = {"label": np.round(occurrences.sum() / len(path_list))}
     stat_df = pd.DataFrame(index=patent_id)
-    stat_df["label"] = occurrences
+    stat_df["labeled"] = occurrences
 
     return relative_occurrences_dict, stat_df
 
