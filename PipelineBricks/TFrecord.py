@@ -238,6 +238,9 @@ if __name__ == '__main__':
     patent_data["level1labels"] = pd.Categorical(patent_data["level1labels"])
     patent_data["level1codes"] = patent_data["level1labels"].cat.codes
 
-    output_dir = pathlib.Path.joinpath(data, "1. Abstract BertBaseUncased SingleClass")
+    output_dir = pathlib.Path.joinpath(data, "1.Abstract-SingleClass")
     converter = TFRecordsConverter(patent_data, output_dir, 0.1, 0.1)
     converter.convert()
+
+
+

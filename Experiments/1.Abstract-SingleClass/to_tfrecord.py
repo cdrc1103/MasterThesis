@@ -4,7 +4,6 @@ import math
 import re
 from multiprocessing import Pool, cpu_count
 import numpy as np
-import pandas as pd
 import tensorflow as tf
 from tqdm import tqdm
 import os
@@ -70,21 +69,6 @@ class TFRecordsConverter:
         if not os.path.exists(self.output_dir):
             os.makedirs(self.output_dir)
 
-    def __repr__(self):
-        return ('{}.{}(output_dir={}, n_shards_train={}, n_shards_test={}, '
-                'n_shards_val={}, n_train={}, '
-                'n_test={}, n_val={})').format(
-            self.__class__.__module__,
-            self.__class__.__name__,
-            self.output_dir,
-            self.n_shards_train,
-            self.n_shards_test,
-            self.n_shards_val,
-            self.n_train,
-            self.n_test,
-            self.n_val,
-        )
-
     def _n_shards(self, n_samples):
         """
         Compute number of shards for number of samples.
@@ -99,7 +83,7 @@ class TFRecordsConverter:
         n_shards: int
             The number of shards needed to fit the provided number of samples.
         """
-        shard_size = 2 * (10**6) # 200 mb maximum
+        shard_size = 2 * (10**8) # 200 mb maximum
         avg_file_size = 600  # rough estimation since the file size per document varies a lot.
         files_per_shard = math.ceil(shard_size / avg_file_size) * _COMPRESSION_SCALING_FACTOR
         return math.ceil(n_samples / files_per_shard)
@@ -110,13 +94,13 @@ class TFRecordsConverter:
 
         :param
         shard_data: tuple(str, list)
-            A tupöe containing the shard path and the list of indices to write to it.
+            A tuple containing the shard path and the list of indices to write to it.
         :return:
         """
 
         shard_path, indices = shard_data
         with tf.io.TFRecordWriter(shard_path, options=_COMPRESSION_LIB) as out:
-            for index in indices:
+            for index in tqdm(indices):
 
                 row = self.filepaths.iloc[index, :]  # get the respective filepath
 
@@ -127,12 +111,13 @@ class TFRecordsConverter:
                 # Extract label
                 label = row["level1codes"] # get label
 
-                example = tf.train.Example(features=tf.train.Features(feature={
-                    'abstract': _bytes_feature(abstract_text.encode()),
-                    'label': _int64_feature(label),
-                }))
+                if abstract_text:
+                    example = tf.train.Example(features=tf.train.Features(feature={
+                        'abstract': _bytes_feature(abstract_text.encode()),
+                        'label': _int64_feature(label),
+                    }))
 
-                out.write(example.SerializeToString())
+                    out.write(example.SerializeToString())
 
     def _get_shard_path(self, split, shard_id, shard_size):
         """
@@ -197,46 +182,30 @@ class TFRecordsConverter:
         :param path:
         :return:
         """
+
         relevant_strings = []
         with open(path, "r+", encoding='utf-8') as file:
-            while True:
-                next_line = file.readline()
+            all_lines = [line for line in file]
+            n_lines = len(all_lines)
+            i = 0
+            while i < n_lines:
+                next_line = all_lines[i]
                 if re.search(r'(?=.*<abstract)(?=.*lang="eng").*', next_line):
-                    next_line = file.readline()
+                    i += 1
+                    next_line = all_lines[i]
                     while not re.search(r'</abstract>', next_line):
                         relevant_strings.append(next_line)
-                        next_line = file.readline()
+                        i += 1
+                        next_line = all_lines[i]
                     break
+                i += 1
 
         super_string = ""
         for string in relevant_strings:
             sub_string = re.search(r'.*?\>(.*)<.*', string)
             if sub_string:
                 super_string += sub_string.group(1)
-        return super_string
-
-
-# Convert to tfRecord
-if __name__ == '__main__':
-    labels = pd.read_csv("ex1_labels.csv", index_col=0)
-    features = pd.read_csv("../../Utilities/statistics.csv", index_col=0)
-    patent_data = pd.concat([features, labels], axis=1)
-
-    # %%
-    patent_data = patent_data[patent_data["level1labels"].notna()]  # drop unlabeled patents
-    patent_data = patent_data[patent_data["abstract"] == 1]  # drop patents that don't contain an abstract
-    #print(f"Number of examples: {labels.size}")
-    #print(patent_data["level1labels"].value_counts())
-
-    # %%
-    # drop AI because of the small number of instances
-    patent_data = patent_data[patent_data["level1labels"] != "Artificial Intelligence (AI)"]
-
-    # %%
-    # convert labels to categorical and create integer codes
-    patent_data["level1labels"] = pd.Categorical(patent_data["level1labels"])
-    patent_data["level1codes"] = patent_data["level1labels"].cat.codes
-
-    output_dir = pathlib.Path.joinpath(data, "1. Abstract BertBaseUncased SingleClass")
-    converter = TFRecordsConverter(patent_data, output_dir, 0.1, 0.1)
-    converter.convert()
+        if super_string:
+            return super_string
+        else:
+            return None
