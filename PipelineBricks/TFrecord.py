@@ -219,7 +219,7 @@ class TFRecordsConverter:
 
 # Convert to tfRecord
 if __name__ == '__main__':
-    labels = pd.read_csv("ex1_labels.csv", index_col=0)
+    labels = pd.read_csv("level1_labels.csv", index_col=0)
     features = pd.read_csv("../../Utilities/statistics.csv", index_col=0)
     patent_data = pd.concat([features, labels], axis=1)
 
