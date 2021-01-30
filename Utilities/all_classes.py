@@ -2,6 +2,10 @@ import pandas as pd
 import re
 import numpy as np
 
+"""
+Creates unique set of the classes.
+"""
+
 labels = pd.read_csv("ip7-data-updated.csv", index_col=0)
 all_classes = []
 for l in labels["technology-field"]:
