@@ -20,7 +20,7 @@ def parse(features, path, patent_id):
     if "abstract" in features:
         text = root.find('.//abstract[@lang="eng"]/').text
         if detect(text) == "en":
-            parsing_results["abstract"] =text
+            parsing_results["abstract"] = text
 
     return parsing_results, patent_id
 
