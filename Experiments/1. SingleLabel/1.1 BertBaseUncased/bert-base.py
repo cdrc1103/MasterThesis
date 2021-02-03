@@ -14,59 +14,68 @@ from tensorflow.keras.utils import to_categorical
 # Libraries to import and process the data set
 import pandas as pd
 from sklearn.model_selection import train_test_split
+import numpy as np
 from datetime import datetime
 
 # Visualization
 import matplotlib.pyplot as plt
-from keras.utils.vis_utils import plot_model
 
 # Utilities
-from Utilities.directories import savedModels
 from contextlib import redirect_stdout
-import pathlib
-import numpy as np
 
-# Stuff that makes notebooks look nicer
-import logging
-from tensorflow import get_logger
-get_logger().setLevel(logging.ERROR)
+""" Parameters """
 
-# Parameters
-experiment_name = "1.Abstract-SingleClass" # name of the experiment
-dataset_dir = "dataset2.csv" # where to read the data from
-save_dir = pathlib.Path.joinpath(savedModels, experiment_name) # where to save model weights and performance
-threshold = 0.8
-max_token_length = 100 # number of tokens per example
+# Names
+experiment_name = "1.1 BertBaseUncased" # name of the experiment
+dataset_file = "dataset.csv"  # where to read the data from
 model_name = 'bert-base-uncased'
-test_size = 0.1
-batch_size = 1
-epochs = 10
+
+# Early stopping
+acc_threshold = 0.99
+
+# Dataset
+max_token_length = 100 # number of tokens per example
+test_size = 0.5
+validation_split = 0.1 # is splitted from the training set
+
+# Training
+batch_size = 16
+epochs = 3
+
+# Adam Optimizer
+learning_rate = 5e-05
+epsilon = 1e-08
+decay = 0.01
+clipnorm = 1.0
+
+""" ----------- """
 
 # Callbacks
 class myCallback(Callback):
     def on_epoch_end(self, epoch, logs=None):
-        if logs.get('accuracy') > threshold:
-            print(f"\nReached {threshold}% accuracy so cancelling training!")
+        if logs.get('accuracy') > acc_threshold:
+            print(f"\nReached {acc_threshold}% accuracy so cancelling training!")
             self.model.stop_training = True
 callbacks = myCallback()
 
+
 # Read data
-dataset = pd.read_csv(dataset_dir)
-dataset = dataset[0:10]
-n_classes = 16
+dataset = pd.read_csv(dataset_file)
+n_classes = len(dataset["label_encoded"].unique())
 
 # Load transformers config and set output_hidden_states to False ---> Why?
 # from_pretrained loads weights from pretrained model
 config = BertConfig.from_pretrained(model_name)
 config.output_hidden_states = False
-print(f"Model config: {config}")
-with open(pathlib.Path.joinpath(save_dir, 'config.txt'), 'w') as file: # save config to dir
+# print(f"Model config: {config}")
+timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+with open(f'config_{timestamp}.txt', 'w') as file: # save config to dir
     with redirect_stdout(file):
         print(config)
 
 # Split data and tokenize the input
 train, test = train_test_split(dataset, test_size=test_size, random_state=10000, shuffle=True) # random state for reproducability
-tokenizer = BertTokenizerFast.from_pretrained(pretrained_model_name_or_path = model_name, config = config)
+tokenizer = BertTokenizerFast.from_pretrained(pretrained_model_name_or_path=model_name, config=config)
 x_train = tokenizer(
     text=train['abstract'].to_list(),
     add_special_tokens=True,
@@ -115,21 +124,22 @@ outputs = {'label': label}
 model = Model(inputs=inputs, outputs=outputs, name=experiment_name)
 
 # Print model structure and save it
-with open(pathlib.Path.joinpath(save_dir, 'summary.txt'), 'w') as file:
+timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+with open(f'summary_{timestamp}.txt', 'w') as file:
     # Pass the file handle in as a lambda function to make it callable
     model.summary(print_fn=lambda x: file.write(x + '\n'))
-plot_model(model, to_file=pathlib.Path.joinpath(save_dir, "model.png"))
 
 # Set an optimizer
 optimizer = Adam(
-    learning_rate=5e-05,
-    epsilon=1e-08,
-    decay=0.01,
-    clipnorm=1.0)
+    learning_rate=learning_rate,
+    epsilon=epsilon,
+    decay=decay,
+    clipnorm=clipnorm)
 
 # Set loss and metrics
 loss = {'label': CategoricalCrossentropy(from_logits=True)}
-# Using from_logits=true means that the prediction tensor is one hot encoded. By default, it expects a probability distribution
+# Using from_logits=true means that the prediction tensor is one hot encoded.
+# By default, it expects a probability distribution
 metric = {'label': CategoricalAccuracy('accuracy')}
 
 # Compile the model
@@ -142,7 +152,7 @@ model.compile(
 history = model.fit(
     x={'input_ids': np.array(x_train["input_ids"])},
     y={'label': np.array(y_train)},
-    validation_split=0.2,
+    validation_split=validation_split,
     batch_size=batch_size,
     epochs=epochs,
     callbacks=[callbacks],
@@ -179,6 +189,6 @@ plt.tight_layout()
 plt.show()
 
 timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-fig1.savefig(pathlib.Path.joinpath(save_dir, f"accuracy_{timestamp}"), dpi=300)
-fig2.savefig(pathlib.Path.joinpath(save_dir, f"loss_{timestamp}"), dpi=300)
-model.save(pathlib.Path.joinpath(save_dir, timestamp))
+fig1.savefig(f"accuracy_{timestamp}", dpi=300)
+fig2.savefig(f"loss_{timestamp}", dpi=300)
+model.save(f"model_{timestamp}")
