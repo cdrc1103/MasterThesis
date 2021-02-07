@@ -2,7 +2,6 @@ import xml.etree.ElementTree as ET
 import pandas as pd
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from langdetect import detect
 
 
 def parse(features, path, patent_id):
@@ -19,8 +18,7 @@ def parse(features, path, patent_id):
 
     if "abstract" in features:
         text = root.find('.//abstract[@lang="eng"]/').text
-        if detect(text) == "en":
-            parsing_results["abstract"] = text
+        parsing_results["abstract"] = text
 
     return parsing_results, patent_id
 
