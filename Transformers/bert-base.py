@@ -180,9 +180,9 @@ class Bert:
 
 
 if __name__ == '__main__':
-    experiment_name = "1.1 BertBaseUncased"
+    experiment_name = "1.1_BertBaseUncased"
     read_dir = lexis_abstract
-    save_dir = pathlib.Path.joinpath(savedModels, "1.1 BertBaseUncased")
+    save_dir = pathlib.Path.joinpath(savedModels, "1.1_BertBaseUncased")
     n_classes = 15
     b = Bert(experiment_name=experiment_name, read_dir=read_dir, save_dir=save_dir, n_classes=n_classes)
     b.load_data()
