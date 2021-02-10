@@ -1,6 +1,6 @@
 """ Dependencies """
 # Load Huggingface transformer
-from transformers import TFBertModel, BertConfig, BertTokenizerFast
+from transformers import TFDistilBertModel, DistilBertConfig, DistilBertTokenizerFast
 
 # Then what you need from tensorflow.keras
 from tensorflow.keras.layers import Input, Dropout, Dense
@@ -32,31 +32,30 @@ import json
 
 """ Directories and filenames """
 # Define some names
-experiment_name = "1.1_BertBaseUncased" # name of the experiment
-version = "v5"
+experiment_name = "1.2_DistilBertUncased" # name of the experiment
+version = "v1"
 base_dir = pathlib.Path(f"gdrive/MyDrive/Colab Notebooks/Thesis/{experiment_name}")
 train_dataset = pathlib.Path.joinpath(base_dir, "train.csv")  # where to read the data from
 val_dataset = pathlib.Path.joinpath(base_dir, "val.csv")
 test_dataset = pathlib.Path.joinpath(base_dir, "test.csv")
-model_name = 'bert-base-uncased'
+model_name = 'distilbert-base-uncased'
 logdir = pathlib.Path.joinpath(base_dir, f"logs_{version}")
 # Read data
 train = pd.read_csv(train_dataset)
-train_feature = train["abstract"].to_list()
 val = pd.read_csv(val_dataset)
 test = pd.read_csv(test_dataset)
-n_classes = len(train["label"].unique()) # number of unique classes. since the train-test-split is stratified
+n_classes = len(train["label_encoded"].unique()) # number of unique classes. since the train-test-split is stratified
                                                 # we can be sure all classes are present in train
 
 """ Class weights """
 # Determine class weights to tackle class imbalance
 class_weight = {}
 total_instances = len(train)
-class_freqs = train["label"].value_counts()
+class_freqs = train["label_encoded"].value_counts()
 for class_id, freq in zip(class_freqs.index, class_freqs):
     class_weight[class_id] = (1 / freq)*(total_instances)/2.0
 sample_weight = []
-for class_id in train["label"]:
+for class_id in train["label_encoded"]:
     sample_weight.append(class_weight[class_id])
 
 """ Parameters """
@@ -99,14 +98,14 @@ tensorboard_callback = TensorBoard(logdir, histogram_freq=1, write_graph=False, 
 
 """ Transformer and tokenizer config """
 # Load transformers config
-config = BertConfig.from_pretrained(model_name)
+config = DistilBertConfig.from_pretrained(model_name)
 config.output_hidden_states = False
 with open(pathlib.Path.joinpath(base_dir, f'config_{version}.txt'), 'w') as file: # save config to dir
     with redirect_stdout(file):
         print(config)
 
-tokenizer = BertTokenizerFast.from_pretrained(pretrained_model_name_or_path=model_name, config=config)
-train_encodings = tokenizer(train_feature, truncation=True, padding=True, max_length=max_token_length)
+tokenizer = DistilBertTokenizerFast.from_pretrained(pretrained_model_name_or_path=model_name, config=config)
+train_encodings = tokenizer(train["abstract"].to_list(), truncation=True, padding=True, max_length=max_token_length)
 val_encodings = tokenizer(val["abstract"].to_list(), truncation=True, padding=True, max_length=max_token_length)
 test_encodings = tokenizer(test["abstract"].to_list(), truncation=True, padding=True, max_length=max_token_length)
 
@@ -120,7 +119,7 @@ y_test = to_categorical(test['label'], num_classes=n_classes)
 
 """ Model architecture """
 # Load the Transformers BERT model
-transformer_model = TFBertModel.from_pretrained(model_name, config=config) # loads all pretrained weights
+transformer_model = TFDistilBertModel.from_pretrained(model_name, config=config) # loads all pretrained weights
 # Load the MainLayer
 bert = transformer_model.layers[0]
 
@@ -132,7 +131,7 @@ inputs = {'input_ids': input_ids}
 # Load the Transformers BERT model as a layer in a Keras model
 bert_model = bert(inputs)[1]
 # Add dropout layer for regularization
-dropout_layer = Dropout(config.hidden_dropout_prob, name='regularization_layer') # dropout_prob=0.1
+dropout_layer = Dropout(config.dropout, name='regularization_layer') # dropout_prob=0.1
 dropout = dropout_layer(bert_model, training=False)
 # Add dense layer to condense to the number of classes
 dense = Dense(units=n_classes,
