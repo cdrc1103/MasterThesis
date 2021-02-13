@@ -9,6 +9,6 @@ def create_path_dataset(dataset_dir):
 
     # Combine root directory and filename to a path and put the in a tf data set
     path_list = dataset_dir.glob("*xml")
-    df = pd.DataFrame(path_list, columns=["paths"])
-    df.to_csv(f"{dataset_dir}/paths.csv", index=False)
+    df = pd.DataFrame(path_list, columns=["path"])
+    df.to_csv("paths.csv", index=False)
 
