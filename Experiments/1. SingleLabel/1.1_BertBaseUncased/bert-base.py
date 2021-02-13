@@ -33,16 +33,14 @@ import json
 """ Directories and filenames """
 # Define some names
 experiment_name = "1.1_BertBaseUncased" # name of the experiment
-version = "v5"
+version = "v6"
 base_dir = pathlib.Path(f"gdrive/MyDrive/Colab Notebooks/Thesis/{experiment_name}")
 train_dataset = pathlib.Path.joinpath(base_dir, "train.csv")  # where to read the data from
 val_dataset = pathlib.Path.joinpath(base_dir, "val.csv")
 test_dataset = pathlib.Path.joinpath(base_dir, "test.csv")
 model_name = 'bert-base-uncased'
-logdir = pathlib.Path.joinpath(base_dir, f"logs_{version}")
 # Read data
 train = pd.read_csv(train_dataset)
-train_feature = train["abstract"].to_list()
 val = pd.read_csv(val_dataset)
 test = pd.read_csv(test_dataset)
 n_classes = len(train["label"].unique()) # number of unique classes. since the train-test-split is stratified
@@ -58,6 +56,8 @@ for class_id, freq in zip(class_freqs.index, class_freqs):
 sample_weight = []
 for class_id in train["label"]:
     sample_weight.append(class_weight[class_id])
+class_weight = pd.DataFrame(class_weight, index=class_weight.keys())
+class_weight.to_csv(pathlib.Path.joinpath(base_dir, f"class_weight_{version}.csv"))
 
 """ Parameters """
 # Dataset
@@ -66,7 +66,7 @@ max_token_length = 200 # number of tokens per example
 # Training
 batch_size = 16
 epochs = 3 # iterate over full dataset x times
-random_state = 1000
+random_state = 1
 prefetch_size = 2
 
 # Adam Optimizer
@@ -94,8 +94,9 @@ with open(pathlib.Path.joinpath(base_dir, f"hyperparameters_{version}.json"), 'w
 checkpoint_callback = ModelCheckpoint(filepath=pathlib.Path.joinpath(base_dir, f"checkpoint_{version}.ckpt"),
                               save_weights_only=True, verbose=1,
                               monitor='val_loss',  mode='auto', save_freq='epoch')
-tensorboard_callback = TensorBoard(logdir, histogram_freq=1, write_graph=False, write_images=True,
-                                   update_freq=100, embeddings_freq=1, )
+tensorboard_callback = TensorBoard(pathlib.Path.joinpath(base_dir, f"logs_{version}"),
+                                   histogram_freq=1, write_graph=False, write_images=True,
+                                   update_freq=100)
 
 """ Transformer and tokenizer config """
 # Load transformers config
@@ -106,16 +107,32 @@ with open(pathlib.Path.joinpath(base_dir, f'config_{version}.txt'), 'w') as file
         print(config)
 
 tokenizer = BertTokenizerFast.from_pretrained(pretrained_model_name_or_path=model_name, config=config)
-train_encodings = tokenizer(train_feature, truncation=True, padding=True, max_length=max_token_length)
-val_encodings = tokenizer(val["abstract"].to_list(), truncation=True, padding=True, max_length=max_token_length)
-test_encodings = tokenizer(test["abstract"].to_list(), truncation=True, padding=True, max_length=max_token_length)
 
-def to_tfdataset(x_encoded, y):
-    y = to_categorical(y, num_classes=n_classes)
-    return tf.data.Dataset.from_tensor_slices((dict(x_encoded), y))
-train_ds = to_tfdataset(train_encodings, train["label"])
-val_ds = to_tfdataset(val_encodings, val["label"])
+def tokenize(dataset):
+    return tokenizer(
+        dataset["abstract"].to_list(),
+        truncation=True,
+        padding=True,
+        max_length=max_token_length,
+        return_token_type_ids = False,
+        return_attention_mask = False,
+        return_tensors='tf'
+  )
 
+# Train
+x_train = tokenize(train)
+y_train = to_categorical(train["label"], num_classes=n_classes)
+train_ds = tf.data.Dataset.from_tensor_slices((dict(x_train), y_train, sample_weight))
+train_ds = train_ds.shuffle(buffer_size=len(train), seed=random_state).batch(batch_size)
+
+# Validate
+x_val = tokenize(val)
+y_val = to_categorical(val["label"], num_classes=n_classes)
+val_ds = tf.data.Dataset.from_tensor_slices((dict(x_val), y_val))
+val_ds = val_ds.shuffle(buffer_size=len(val), seed=random_state).batch(batch_size)
+
+# Test
+x_test = tokenize(test)
 y_test = to_categorical(test['label'], num_classes=n_classes)
 
 """ Model architecture """
@@ -125,12 +142,12 @@ transformer_model = TFBertModel.from_pretrained(model_name, config=config) # loa
 bert = transformer_model.layers[0]
 
 # Build model input
-input_ids = Input(shape=max_token_length, name='input_ids', dtype='int64')
-inputs = {'input_ids': input_ids}
+inputs = Input(shape=max_token_length, name='input_ids', dtype='int64')
+input_ids = {"input_ids": inputs}
 
 # Build model output
 # Load the Transformers BERT model as a layer in a Keras model
-bert_model = bert(inputs)[1]
+bert_model = bert(input_ids)[1]
 # Add dropout layer for regularization
 dropout_layer = Dropout(config.hidden_dropout_prob, name='regularization_layer') # dropout_prob=0.1
 dropout = dropout_layer(bert_model, training=False)
@@ -138,9 +155,9 @@ dropout = dropout_layer(bert_model, training=False)
 dense = Dense(units=n_classes,
               kernel_initializer=TruncatedNormal(stddev=config.initializer_range),
               name='dense', activation='softmax')(dropout)
-outputs = {'label': dense}
+outputs = dense
 # Combine it all in a model object
-model = Model(inputs=inputs, outputs=outputs, name=experiment_name)
+model = Model(inputs=input_ids, outputs=outputs, name=experiment_name)
 
 # Print model summary and save it
 with open(pathlib.Path.joinpath(base_dir, f'summary_{version}.txt'), 'w') as file:
@@ -155,12 +172,12 @@ optimizer = Adam(
     clipnorm=clipnorm)
 
 # Set loss and metrics
-loss = {'label': CategoricalCrossentropy(from_logits=False)}
+loss = CategoricalCrossentropy(from_logits=False)
 
 metric = [CategoricalAccuracy(name='accuracy'),
           Precision(name='precision'), # Precision is the percentage of predicted positives that were correctly classified
           Recall(name='recall'), # Recall is the percentage of actual positives that were correctly classified
-          F1Score(name='f1score', num_classes=n_classes, average='macro')]
+          F1Score(name='micro_f1', num_classes=n_classes, average='micro')]
 
 """ Training """
 # Compile the model
@@ -171,12 +188,12 @@ model.compile(
 
 # Fit the model
 history = model.fit(
-    x={'input_ids': train_ds.shuffle(random_state).batch(batch_size).prefetch(prefetch_size)},
-    validation_data={'input_ids': val_ds.shuffle(random_state).batch(batch_size).prefetch(prefetch_size)},
+    x=train_ds,
+    validation_data=val_ds,
     epochs=epochs,
     callbacks=[tensorboard_callback, checkpoint_callback],
-    verbose=1,
-    sample_weight=np.array(sample_weight))
+    verbose=1
+    )
 
 hist_df = pd.DataFrame(history.history)
 hist_df.to_csv(pathlib.Path.joinpath(base_dir, f"history_{version}.csv"))
@@ -215,11 +232,12 @@ def plot_cm(labels, predictions):
     fig.savefig(pathlib.Path.joinpath(base_dir, f"confusion_{version}"), dpi=150)
 
 predictions = model.predict(
-    x={'input_ids': test_encodings},
-    batch_size=batch_size
+    x=x_test["input_ids"],
+    batch_size=batch_size,
+    verbose=1
 )
 # Create confusion matrix from results
-predictions =np.argmax(predictions["label"], axis=1) # select the prediction with highest probability
+predictions =np.argmax(predictions, axis=1) # select the prediction with highest probability
 y_test = np.argmax(y_test, axis=1) # select the true label from one-hot encoding
 plot_cm(y_test, predictions)
 
