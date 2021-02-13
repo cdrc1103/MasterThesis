@@ -1,5 +1,6 @@
 import xml.etree.ElementTree as ET
 import pandas as pd
+import numpy as np
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -14,7 +15,7 @@ def get_text(node):
 def clean_text(text):
     text = " ".join(text.split()) # remove multiples of white / tab spaces
     text =text.replace("\n", "") # remove newline characters
-    if len(text) <= length_threshold: return None # if the text is to short return nothing instead
+    if len(text) <= length_threshold: return np.nan # if the text is to short return nothing instead
     return text
 
 
@@ -61,7 +62,7 @@ def process_files(feature_stats, feature_list):
     """
 
     dataset = pd.DataFrame(index=feature_stats.index)
-    dataset[feature_list] = None
+    dataset[feature_list] = np.nan
 
     with ThreadPoolExecutor() as executor:
         futures = []
