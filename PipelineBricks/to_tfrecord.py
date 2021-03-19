@@ -7,7 +7,7 @@ import numpy as np
 import tensorflow as tf
 from tqdm import tqdm
 import os
-from Utilities.directories import data
+from Utilities.secrets import data
 import pathlib
 
 _SEED = 2020

@@ -4,7 +4,7 @@ import concurrent.futures
 from tqdm import tqdm
 import pathlib
 import pandas as pd
-from Utilities.directories import lexis_data
+from Utilities.secrets import lexis_data
 import xml.etree.ElementTree as ET
 
 feature_list = ["abstract",  "description", "claims"]
@@ -109,10 +109,10 @@ def label_occurences(ip7data, path_dataset):
 # The guard is to prevent the endless loop of process generations.
 
 if __name__ == '__main__':
-    path_dataset_dir = pathlib.Path.joinpath(lexis_data, "paths.csv")
+    path_dataset_dir = "paths.csv"
     ip7data = "ip7-data-updated.csv"
     relative_label_occ, label_df = label_occurences(ip7data, path_dataset_dir)
     print(f"Relative label occurrence: {relative_label_occ}")
     relative_feature_occ, stat_df = feature_occurences(path_dataset_dir, label_df)
     print(f"Relative feature occurrence: {relative_feature_occ}")
-    stat_df.to_csv("feature_stats.csv")
+    stat_df.to_csv("feature_stats_linux.csv")

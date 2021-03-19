@@ -13,7 +13,7 @@ from tensorflow.keras.metrics import CategoricalAccuracy
 from tensorflow.keras.utils import to_categorical
 
 # Libraries to import and process the data set
-from Utilities import directories
+from Utilities import secrets
 import pickle
 import pandas as pd
 from sklearn.model_selection import train_test_split
@@ -24,7 +24,7 @@ import matplotlib.pyplot as plt
 from keras.utils.vis_utils import plot_model
 
 # Utilities
-from Utilities.directories import lexis_abstract, savedModels
+from Utilities.secrets import lexis_abstract, savedModels
 from contextlib import redirect_stdout
 import pathlib
 

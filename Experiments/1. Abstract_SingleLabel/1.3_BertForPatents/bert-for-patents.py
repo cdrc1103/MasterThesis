@@ -1,6 +1,6 @@
 """ Dependencies """
 # Load Huggingface transformer
-from transformers import TFBertModel, BertConfig, BertTokenizerFast
+from transformers import BertModel, BertConfig, BertTokenizerFast, TFPreTrainedModel, PreTrainedModel
 
 # Then what you need from tensorflow.keras
 from tensorflow.keras.layers import Input, Dropout, Dense
@@ -9,7 +9,7 @@ from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.callbacks import ModelCheckpoint, TensorBoard
 from tensorflow.keras.initializers import TruncatedNormal
 from tensorflow.keras.losses import CategoricalCrossentropy
-from tensorflow.keras.metrics import CategoricalAccuracy, Precision, Recall
+from tensorflow.keras.metrics import CategoricalAccuracy, Precision, Recall, AUC
 from tensorflow.keras.utils import to_categorical
 import tensorflow as tf
 
@@ -22,7 +22,7 @@ import numpy as np
 
 # Visualization
 import matplotlib.pyplot as plt
-from sklearn.metrics import confusion_matrix, classification_report
+from sklearn.metrics import confusion_matrix, classification_report, roc_curve, auc
 import seaborn as sns
 
 # Utilities
@@ -32,16 +32,15 @@ import json
 
 """ Directories and filenames """
 # Define some names
-experiment_name = "1.1_BertBaseUncased" # name of the experiment
-version = "v6"
-base_dir = pathlib.Path(f"gdrive/MyDrive/Colab Notebooks/Thesis/{experiment_name}")
-train_dataset = pathlib.Path.joinpath(base_dir, "train.csv")  # where to read the data from
-val_dataset = pathlib.Path.joinpath(base_dir, "val.csv")
-test_dataset = pathlib.Path.joinpath(base_dir, "test.csv")
-model_name = 'bert-base-uncased'
+experiment_name = "1.3_BertForPatents" # name of the experiment
+version = "v3"
+# base_dir = pathlib.Path(f"gdrive/MyDrive/Colab Notebooks/Thesis/{experiment_name}")
+base_dir = pathlib.Path("")
+train_dataset = pathlib.Path.joinpath(base_dir, f"train_{version}.csv")  # where to read the data from
+test_dataset = pathlib.Path.joinpath(base_dir, f"test_{version}.csv")
+model_name = 'bert-for-patents'
 # Read data
 train = pd.read_csv(train_dataset)
-val = pd.read_csv(val_dataset)
 test = pd.read_csv(test_dataset)
 n_classes = len(train["label"].unique()) # number of unique classes. since the train-test-split is stratified
                                                 # we can be sure all classes are present in train
@@ -53,19 +52,20 @@ total_instances = len(train)
 class_freqs = train["label"].value_counts()
 for class_id, freq in zip(class_freqs.index, class_freqs):
     class_weight[class_id] = (1 / freq)*(total_instances)/2.0
+class_weight = pd.DataFrame(class_weight, index=class_weight.keys())
+class_weight.to_csv(pathlib.Path.joinpath(base_dir, f"class_weight_{version}.csv"))
 sample_weight = []
 for class_id in train["label"]:
     sample_weight.append(class_weight[class_id])
-class_weight = pd.DataFrame(class_weight, index=class_weight.keys())
-class_weight.to_csv(pathlib.Path.joinpath(base_dir, f"class_weight_{version}.csv"))
+
 
 """ Parameters """
 # Dataset
-max_token_length = 200 # number of tokens per example
+max_token_length = 30 # number of tokens per example
 
 # Training
-batch_size = 16
-epochs = 3 # iterate over full dataset x times
+batch_size = 32
+epochs = 1 # iterate over full dataset x times
 random_state = 1
 prefetch_size = 2
 
@@ -93,20 +93,20 @@ with open(pathlib.Path.joinpath(base_dir, f"hyperparameters_{version}.json"), 'w
 """ Callbacks """
 checkpoint_callback = ModelCheckpoint(filepath=pathlib.Path.joinpath(base_dir, f"checkpoint_{version}.ckpt"),
                               save_weights_only=True, verbose=1,
-                              monitor='val_loss',  mode='auto', save_freq='epoch')
+                              mode='auto', save_freq='epoch')
 tensorboard_callback = TensorBoard(pathlib.Path.joinpath(base_dir, f"logs_{version}"),
-                                   histogram_freq=1, write_graph=False, write_images=True,
+                                   histogram_freq=1, write_graph=False, write_images=False,
                                    update_freq=100)
 
 """ Transformer and tokenizer config """
 # Load transformers config
-config = BertConfig.from_pretrained(model_name)
+config = BertConfig.from_json_file("bert_for_patents_large_config.json")
 config.output_hidden_states = False
 with open(pathlib.Path.joinpath(base_dir, f'config_{version}.txt'), 'w') as file: # save config to dir
     with redirect_stdout(file):
         print(config)
 
-tokenizer = BertTokenizerFast.from_pretrained(pretrained_model_name_or_path=model_name, config=config)
+tokenizer = BertTokenizerFast("bert_for_patents_vocab_39k.txt")
 
 def tokenize(dataset):
     return tokenizer(
@@ -122,14 +122,8 @@ def tokenize(dataset):
 # Train
 x_train = tokenize(train)
 y_train = to_categorical(train["label"], num_classes=n_classes)
-train_ds = tf.data.Dataset.from_tensor_slices((dict(x_train), y_train, sample_weight))
+train_ds = tf.data.Dataset.from_tensor_slices((dict(x_train), y_train))
 train_ds = train_ds.shuffle(buffer_size=len(train), seed=random_state).batch(batch_size)
-
-# Validate
-x_val = tokenize(val)
-y_val = to_categorical(val["label"], num_classes=n_classes)
-val_ds = tf.data.Dataset.from_tensor_slices((dict(x_val), y_val))
-val_ds = val_ds.shuffle(buffer_size=len(val), seed=random_state).batch(batch_size)
 
 # Test
 x_test = tokenize(test)
@@ -137,7 +131,9 @@ y_test = to_categorical(test['label'], num_classes=n_classes)
 
 """ Model architecture """
 # Load the Transformers BERT model
-transformer_model = TFBertModel.from_pretrained(model_name, config=config) # loads all pretrained weights
+transformer_model = BertModel.from_pretrained("/home/cedric/Documents/Data/tf_model/model.ckpt.index", config=config, from_tf=True)
+transformer_model.save_pretrained("/home/cedric/Documents/MasterThesis/Experiments/1. Abstract_SingleLabel/1.3_BertForPatents")
+transformer_model = TFPreTrainedModel.from_pretrained(transformer_model, config=config, from_pt=True) # loads all pretrained weights
 # Load the MainLayer
 bert = transformer_model.layers[0]
 
@@ -160,7 +156,7 @@ outputs = dense
 model = Model(inputs=input_ids, outputs=outputs, name=experiment_name)
 
 # Print model summary and save it
-with open(pathlib.Path.joinpath(base_dir, f'summary_{version}.txt'), 'w') as file:
+with open(pathlib.Path.joinpath(base_dir, f'model_summary_{version}.txt'), 'w') as file:
     # Pass the file handle in as a lambda function to make it callable
     model.summary(print_fn=lambda x: file.write(x + '\n'))
 
@@ -177,7 +173,7 @@ loss = CategoricalCrossentropy(from_logits=False)
 metric = [CategoricalAccuracy(name='accuracy'),
           Precision(name='precision'), # Precision is the percentage of predicted positives that were correctly classified
           Recall(name='recall'), # Recall is the percentage of actual positives that were correctly classified
-          F1Score(name='micro_f1', num_classes=n_classes, average='micro')]
+          F1Score(name='macro_f1', num_classes=n_classes, average='macro')]
 
 """ Training """
 # Compile the model
@@ -189,36 +185,33 @@ model.compile(
 # Fit the model
 history = model.fit(
     x=train_ds,
-    validation_data=val_ds,
     epochs=epochs,
-    callbacks=[tensorboard_callback, checkpoint_callback],
+    callbacks=[tensorboard_callback],
     verbose=1
     )
 
 hist_df = pd.DataFrame(history.history)
 hist_df.to_csv(pathlib.Path.joinpath(base_dir, f"history_{version}.csv"))
 
-"""" Evaluation """
-# plot the metric history from training
-def plot_metrics(history):
-    metrics = ['accuracy', 'f1score', 'precision', 'recall']
-    fig = plt.figure()
-    for n, metric in enumerate(metrics):
-        name = metric.replace("_", " ").capitalize()
-        plt.subplot(2, 2, n+1)
-        plt.plot(history.epoch, history.history[metric], label="Train")
-        plt.plot(history.epoch, history.history['val_'+metric], label="Validation")
-        plt.grid()
-        plt.xlabel("Epoch")
-        plt.ylabel(name)
-        plt.ylim([0,1])
-        plt.legend(loc='upper left')
-        plt.xticks(np.arange(0, epochs), np.arange(1, epochs))
-    plt.tight_layout()
-    fig.savefig(pathlib.Path.joinpath(base_dir, f"metrics_{version}"), dpi=150)
+""" Evaluation """
 
-plot_metrics(history)
+# Evaluate
+results = model.evaluate(x_test["input_ids"], y_test, batch_size=batch_size)
+results_df = pd.DataFrame(results, index=["loss", "accuracy", "precision", "recall", "macro_f1"])
+results_df.to_csv(pathlib.Path.joinpath(base_dir, f"tf_evaluation{version}.csv"))
+print(results_df)
 
+# Predictions on test dataset
+predictions = model.predict(
+    x=x_test["input_ids"],
+    batch_size=batch_size,
+    verbose=1
+)
+np.savetxt(f'predictions{version}.csv', predictions, delimiter=',')
+prediction_max =np.argmax(predictions, axis=1) # select the prediction with highest probability
+true_label = np.argmax(y_test, axis=1) # select the true label from one-hot encoding
+
+# Create confusion matrix from results
 def plot_cm(labels, predictions):
     cm = confusion_matrix(labels, predictions, labels=np.arange(0,n_classes))
     sum_per_label = np.sum(cm, axis=1)
@@ -231,18 +224,10 @@ def plot_cm(labels, predictions):
     plt.tight_layout()
     fig.savefig(pathlib.Path.joinpath(base_dir, f"confusion_{version}"), dpi=150)
 
-predictions = model.predict(
-    x=x_test["input_ids"],
-    batch_size=batch_size,
-    verbose=1
-)
-# Create confusion matrix from results
-predictions =np.argmax(predictions, axis=1) # select the prediction with highest probability
-y_test = np.argmax(y_test, axis=1) # select the true label from one-hot encoding
-plot_cm(y_test, predictions)
+plot_cm(true_label, prediction_max)
 
-# Calculate classification report
+# Calculate metrics per label
 cls_names =[str(cls) for cls in np.arange(0, n_classes)]
-cls_report = classification_report(y_test, predictions, target_names=cls_names, output_dict=True)
+cls_report = classification_report(true_label, prediction_max, target_names=cls_names, output_dict=True)
 cls_report = pd.DataFrame(cls_report).round(2)
 cls_report.to_csv(pathlib.Path.joinpath(base_dir, f"metrics_report_{version}.csv"))
