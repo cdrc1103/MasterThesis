@@ -4,7 +4,6 @@ import concurrent.futures
 from tqdm import tqdm
 import pathlib
 import pandas as pd
-from Utilities.secrets import lexis_data
 import xml.etree.ElementTree as ET
 
 feature_list = ["abstract",  "description", "claims"]
@@ -19,7 +18,7 @@ def search_features(patent_path, patent_id, label):
     :return:
     """
 
-    occurrences = np.zeros([len(feature_list)], dtype=bool)  # 4 feature occurences are checked
+    occurrences = np.zeros([len(feature_list)], dtype=bool)  # 3 feature occurences are checked
 
     if label:
         tree = ET.parse(patent_path)

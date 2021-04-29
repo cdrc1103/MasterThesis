@@ -4,6 +4,7 @@ import xml.etree.ElementTree as ET
 # Data processing
 import pandas as pd
 import numpy as np
+from datetime import datetime
 
 # Progress bar
 from tqdm import tqdm
@@ -16,7 +17,7 @@ from Utilities.secrets import username, password
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.dialects.postgresql import *
-from sqlalchemy.types import TEXT, ARRAY
+from sqlalchemy.types import TEXT, ARRAY, DATE
 engine = create_engine(f'postgresql+psycopg2://{username}:{password}@localhost:5432/Thesis', echo=False)
 
 dtypes = {
@@ -30,7 +31,8 @@ dtypes = {
     "class": ARRAY(TEXT),
     "subclass": ARRAY(TEXT),
     "main-group": ARRAY(TEXT),
-    "subgroup": ARRAY(TEXT)
+    "subgroup": ARRAY(TEXT),
+    "date": DATE
 }
 
 upload_freq = 5000 # frequency of uploads to database
@@ -92,12 +94,23 @@ def get_cpc(root):
     return pd.Series(cpc_dict).astype('object')
 
 
+def get_date(root):
+    result = root.findall('.//priority-claims/priority-claim/date')
+    date_raw = [int(r.text) for r in result]
+    if date_raw:
+        date = min([datetime.strptime(str(d), "%Y%m%d") for d in date_raw])
+        return date.date()
+    else:
+        return np.nan
+
+
 ops_map = {
     "abstract": get_abstract,
     "title": get_title,
     "claim": get_claim,
     "description": get_description,
-    "cpc": get_cpc
+    "cpc": get_cpc,
+    "date": get_date
 }
 
 
@@ -141,11 +154,11 @@ def process_files(feature_stats, feature_list, table_name):
             id_list.append(patent_id)
             if counter % upload_freq == 0 or counter == n_rows:
                 for f in feature_list:
-                    temp_df = pd.DataFrame(temp_dict[f], index=id_list)
+                    temp_df = pd.DataFrame(temp_dict[f], index=id_list, columns=[f])
                     temp_df["level1labels"] = feature_stats["label"]
                     temp_df.index.rename("patentid", inplace=True)
                     with engine.begin() as conn:
-                        temp_df = temp_df[temp_df.notna()]
+                        temp_df = temp_df.dropna()
                         temp_df.to_sql(
                             name=table_name,
                             con=conn,
@@ -156,3 +169,14 @@ def process_files(feature_stats, feature_list, table_name):
                 id_list = []
             counter += 1
         return temp_df
+
+
+if __name__ == '__main__':
+    existing_data = pd.read_sql("date", con=engine, index_col="patentid")
+    stats = pd.read_csv("../Experiments/feature_stats_linux.csv", index_col=0)
+    stats = stats[stats["label"]==1]
+    labels = pd.read_csv("level1labels.csv", index_col=0).dropna()
+    labels["level1labels"] = labels["level1labels"].apply(lambda x: eval(x))
+    stats["label"] = labels["level1labels"]
+    stats = stats[~stats.index.isin(existing_data.index)]
+    process_files(stats, ["date"], "date")
