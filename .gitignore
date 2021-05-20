@@ -1,4 +1,5 @@
 .idea/
 *.env
-**/secrets.py
+secrets.py
 *.png
+*.ipynb_checkpoints
