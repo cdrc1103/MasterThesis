@@ -54,15 +54,21 @@ def clean_text(text, length_threshold=40):
 
 
 def get_abstract(root):
-    result = root.find('.//abstract[@lang="eng"]/*')
-    text = get_text(result)
-    return clean_text(text)
+    result = root.findall('.//abstract[@lang="eng"]/*')
+    if result is not None:
+        text = " ".join([get_text(r) for r in result])
+        return clean_text(text)
+    else:
+        return np.nan
 
 
 def get_title(root):
-    result = root.find('bibliographic-data/invention-title[@lang="eng"]')
-    text = get_text(result)
-    return clean_text(text, 0)
+    result = root.findall('bibliographic-data/invention-title[@lang="eng"]')
+    if result is not None:
+        text = " ".join([get_text(r) for r in result])
+        return clean_text(text, 0)
+    else:
+        return np.nan
 
 
 def get_claim(root):

@@ -6,21 +6,20 @@ import pathlib
 import pandas as pd
 import xml.etree.ElementTree as ET
 
-FEATURE_LIST = ["abstract",  "description", "claims", "title"]
+FEATURE_LIST = ["abstract",  "description", "claims", "invention-title"]
 
 
-def search_features(patent_path, patent_id, label):
+def search_features(patent_path, patent_id):
 
     occurrences = np.zeros([len(FEATURE_LIST)], dtype=bool)  # 3 feature occurences are checked
 
-    if label:
-        tree = ET.parse(patent_path)
-        root = tree.getroot()
+    tree = ET.parse(patent_path)
+    root = tree.getroot()
 
-        # check feature occurrence
-        for i, feature in enumerate(FEATURE_LIST):
-            if root.find('.//%s[@lang="eng"]/' % feature) is not None:
-                occurrences[i] = True
+    # check feature occurrence
+    for i, feature in enumerate(FEATURE_LIST):
+        if root.find('.//%s[@lang="eng"]' % feature) is not None:
+            occurrences[i] = True
 
     return occurrences, patent_id, patent_path
 
@@ -40,8 +39,8 @@ def feature_occurences(path_dataset, label_dataset):
 
     with ThreadPoolExecutor() as executor:
         futures = []
-        for path, patent_id, label in zip(path_list, label_dataset.index, label_dataset.iloc[:, 0]):
-            futures.append(executor.submit(search_features, path, patent_id, label))
+        for path, patent_id in zip(path_list, label_dataset.index):
+            futures.append(executor.submit(search_features, path, patent_id))
 
         for i, future in enumerate(tqdm(concurrent.futures.as_completed(futures), total=len(path_list))):
             occ, patent_id, patent_path = future.result()
@@ -50,7 +49,7 @@ def feature_occurences(path_dataset, label_dataset):
             new_path_list.append(patent_path)
             occurrence_sum += occ
 
-    relative_occuraences = np.round(occurrence_sum / len(path_list), 2)
+    relative_occurences = np.round(occurrence_sum / len(path_list), 2)
     relative_occurences_dict = {f: o for f, o in zip(FEATURE_LIST, relative_occurences)}
 
     stat_df = pd.DataFrame(index=new_id_order)

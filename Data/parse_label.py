@@ -7,6 +7,9 @@ import pandas as pd
 import numpy as np
 import re
 
+# Name for irrelevant classes
+IRRELEVANT = "Irrelevant"
+
 
 def parse_label(ip7label_hierarchy, label_occ):
     """
@@ -22,13 +25,12 @@ def parse_label(ip7label_hierarchy, label_occ):
             level1_labels = set()
             for ele in label_hierarchy.split(','): # split all classes
                 class_list = [re.sub(r'^\s+|\s+$|"', '', h) for h in ele.split('/')] # split all hierarchies within respective class
-                # if not class_list[0] in unwanted_classes: # skip this one because it has no information
                 level1_labels.add(class_list[0]) # add highest level of hierarchy to set so that there are no duplicates
             if level1_labels: # if there is a label in the set
                 level1_labels_list.append(list(level1_labels))
             else:
                 level1_labels_list.append(np.nan)
         else:
-            level1_labels_list.append(np.nan)
+            level1_labels_list.append([IRRELEVANT])
     labels = pd.Series(level1_labels_list, index=label_occ.index, name="level1labels")
     return labels
