@@ -22,16 +22,12 @@ engine = create_engine(f'postgresql+psycopg2://{USERNAME}:{PASSWORD}@localhost:5
 
 dtypes = {
     'level1labels': ARRAY(TEXT),
-    'claim': ARRAY(TEXT),
+    'claim': TEXT,
     'patentid': VARCHAR(100),
     'abstract': TEXT,
     'title': TEXT,
     'description': TEXT,
-    "section": ARRAY(TEXT),
-    "class": ARRAY(TEXT),
-    "subclass": ARRAY(TEXT),
-    "main-group": ARRAY(TEXT),
-    "subgroup": ARRAY(TEXT),
+    'ipc': TEXT,
     "date": DATE
 }
 
@@ -73,14 +69,11 @@ def get_title(root):
 
 def get_claim(root):
     text = root.findall('.//claims[@lang="eng"]/claim/')
-    text = [get_text(t) for t in text]
-    new_text = []
     if text:
-        for t in text:
-            new_t = clean_text(t, 0)
-            if isinstance(new_t, str):
-                new_text.append(new_t)
-        return new_text
+        text = get_text(text[0])
+    if text:
+        text = clean_text(text, 0)
+        return text
     else:
         return np.nan
 
@@ -91,13 +84,17 @@ def get_description(root):
     return clean_text(text)
 
 
-def get_cpc(root):
-    cpc_elements = ["section", "class", "subclass", "main-group", "subgroup"]
-    cpc_dict = {}
-    for ele in cpc_elements:
-        values = root.findall(f'bibliographic-data/classifications-cpc/classification-cpc/{ele}')
-        cpc_dict[ele] = set(map(lambda v: v.text, values)) or np.nan
-    return pd.Series(cpc_dict).astype('object')
+def get_ipc(root):
+    ipc_elements = ["section", "class", "subclass", "main-group", "subgroup"]
+    code_list = []
+    ipc_codes = root.findall(f'bibliographic-data/classifications-ipcr/classification-ipcr')
+    for code in ipc_codes:
+        code_elements = [code.find(ipc_e) for ipc_e in ipc_elements]
+        code_list.append(" ".join([c.text for c in code_elements if c is not None]))
+    if code_list:
+        return str(code_list)
+    else:
+        return np.nan
 
 
 def get_date(root):
@@ -115,7 +112,7 @@ ops_map = {
     "title": get_title,
     "claim": get_claim,
     "description": get_description,
-    "cpc": get_cpc,
+    "ipc": get_ipc,
     "date": get_date
 }
 
@@ -144,7 +141,7 @@ def process_files(feature_occ, feature_list, table_name):
     :return:
     """
 
-    with ThreadPoolExecutor() as executor:
+    with ThreadPoolExecutor(max_workers=1) as executor:
         futures = []
         for path, patent_id in zip(feature_occ["path"], feature_occ.index):
             futures.append(executor.submit(parse, feature_list, path, patent_id))
