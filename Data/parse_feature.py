@@ -31,8 +31,6 @@ dtypes = {
     "date": DATE
 }
 
-upload_freq = 5000 # frequency of uploads to database
-
 
 def get_text(node):
     if node is None:
@@ -68,11 +66,11 @@ def get_title(root):
 
 
 def get_claim(root):
-    text = root.findall('.//claims[@lang="eng"]/claim/')
+    text = root.findall('.//claims[@lang="eng"]/claim')
     if text:
         text = get_text(text[0])
     if text:
-        text = clean_text(text, 0)
+        text = clean_text(text)
         return text
     else:
         return np.nan
@@ -134,14 +132,14 @@ def parse(features, path, patent_id):
     return parsing_results, patent_id
 
 
-def process_files(feature_occ, feature_list, table_name):
+def process_files(feature_occ, feature_list, table_name, upload_freq=5000):
     """
 
     :param path_list:
     :return:
     """
 
-    with ThreadPoolExecutor(max_workers=1) as executor:
+    with ThreadPoolExecutor() as executor:
         futures = []
         for path, patent_id in zip(feature_occ["path"], feature_occ.index):
             futures.append(executor.submit(parse, feature_list, path, patent_id))
