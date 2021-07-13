@@ -4,3 +4,8 @@ secrets.py
 *.png
 *.ipynb_checkpoints
 *.csv
+/Data/Files/
+/Data/DataDescription.ipynb
+/Experiments/MultiClass/CreateDataset.ipynb
+/Experiments/MultiLabel/CreateDataset.ipynb
+/Experiments/MutiLabel/SynonymsDataSet.ipynb
