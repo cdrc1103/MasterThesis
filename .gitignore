@@ -3,3 +3,4 @@
 secrets.py
 *.png
 *.ipynb_checkpoints
+*.csv
