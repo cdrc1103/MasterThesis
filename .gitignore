@@ -1,7 +1,6 @@
 .idea/
 *.env
 secrets.py
-*.png
 *.ipynb_checkpoints
 *.csv
 /Data/Files/
